@@ -2,7 +2,7 @@
 
 # Script de instalação rápida do Graph Extractor
 
-echo "📊 Graph Data Extractor - Instalação"
+echo "📊 Data From Plot - Instalação"
 echo "===================================="
 echo ""
 

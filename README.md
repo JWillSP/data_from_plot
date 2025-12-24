@@ -1,4 +1,4 @@
-# 📊 Graph Data Extractor - Aplicação Streamlit
+# 📊 Data From Plot - Aplicação Streamlit
 
 Aplicação web avançada para extração de dados de gráficos com interface intuitiva.
 

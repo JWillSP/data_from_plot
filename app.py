@@ -19,7 +19,7 @@ from modules import GraphExtractor
 from modules.data_types import AxisCalibration
 
 st.set_page_config(
-    page_title="Graph Data Extractor",
+    page_title="Data From Plot",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -86,7 +86,7 @@ def plot_series(data_points, x_calib, y_calib):
 
 def main():
     # Cabeçalho
-    st.markdown('<div class="main-header">📊 Graph Data Extractor</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📊 Data From Plot</div>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -326,7 +326,7 @@ def main():
     st.divider()
     st.markdown("""
         <div style="text-align: center; color: #666; padding: 1rem;">
-            📊 Graph Data Extractor v2.0 | Desenvolvido com ❤️
+            📊 Data From Plot v2.0 | Desenvolvido com ❤️
         </div>
     """, unsafe_allow_html=True)
 
