@@ -223,6 +223,28 @@ def main():
             
             # Gráficos interativos
             st.header("📊 3. Gráficos Extraídos")
+
+
+
+            with st.expander("🎯 Filtrar Séries", expanded=False):
+                available_series = list(extractor.data_points.keys())
+                if available_series:
+                    series_to_keep = st.multiselect(
+                        "Selecione as séries para manter:",
+                        options=available_series,
+                        default=available_series,
+                        key="series_filter"
+                    )
+                    
+                    if st.button("Aplicar Filtro", key="apply_filter"):
+                        # Remover séries não selecionadas
+                        for series in list(extractor.data_points.keys()):
+                            if series not in series_to_keep:
+                                del extractor.data_points[series]
+                        st.success(f"✅ {len(series_to_keep)} série(s) mantida(s)")
+                        st.rerun()
+
+
             
             figs = plot_series(
                 extractor.data_points,
