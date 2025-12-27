@@ -18,10 +18,11 @@ except ImportError:
 class MarkerDetectorV3:
     """Detector híbrido: HSV para marcadores + Grid para curvas"""
     
-    def __init__(self, img: np.ndarray, frame: GraphFrame):
+    def __init__(self, img: np.ndarray, frame: GraphFrame, grid_divisions: int = 100):
         self.img = img
         self.frame = frame
         self.gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        self.grid_divisions = grid_divisions
         
     def detect_all(self, x_calib: AxisCalibration, y_calib: AxisCalibration):
         """Pipeline híbrido: marcadores destacados + grid para curvas"""
@@ -41,9 +42,9 @@ class MarkerDetectorV3:
         markers = self._detect_highlighted_markers_hsv(roi, x1, y1)
         print(f"    ✓ {len(markers)} marcadores destacados")
         
-        # ETAPA 2: Detectar curvas FINAS via Grid 100x100 = 10.000 células
-        print("  Camada 2: Detectando curvas via grid 100x100...")
-        curves = self._detect_curves_with_grid(roi, x1, y1, grid_size=100)
+        # ETAPA 2: Detectar curvas FINAS via Grid configurável
+        print(f"  Camada 2: Detectando curvas via grid {self.grid_divisions}x{self.grid_divisions}...")
+        curves = self._detect_curves_with_grid(roi, x1, y1, grid_size=self.grid_divisions)
         print(f"    ✓ {len(curves)} pontos em curvas")
         
         # ETAPA 3: Separar por cor E tipo (não misturar marcadores com curvas)

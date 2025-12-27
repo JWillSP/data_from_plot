@@ -108,7 +108,7 @@ modules_v3/
 ├── axis_detector.py               # Detecção de eixos (HoughLines)
 ├── calibrator_v3.py              ✨ NOVO - OCR multi-estratégia
 ├── marker_detector_v3.py         ✨ NOVO - HSV + Grid híbrido
-├── graph_extractor_v3.py         ✨ NOVO - Orquestração
+├── graph_extractor.py         ✨ NOVO - Orquestração
 ├── exporter.py                    # Exportação (Excel, CSV, TXT)
 └── test_modules_v3.py             # Script de teste
 ```
@@ -120,7 +120,7 @@ modules_v3/
 ### Importar e Processar
 
 ```python
-from graph_extractor_v3 import GraphExtractor
+from graph_extractor import GraphExtractor
 
 # Criar extrator
 extractor = GraphExtractor('caminho/para/imagem.png')

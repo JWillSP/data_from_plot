@@ -1,26 +1,37 @@
 """
-Classe principal do Graph Extractor
+Classe principal do Graph Extractor V3 - HÍBRIDO
+Usa:
+- marker_detector_v3 (HSV + Grid 10k)
+- calibrator_v3 (OCR robusto)
 """
 import cv2
 import numpy as np
 from typing import Dict, Optional
-from .axis_detector import AxisDetector
-from .calibrator_v2 import AxisCalibratorV2
-from .marker_detector_v2 import MarkerDetectorV2
-from .exporter import DataExporter
-from .data_types import GraphFrame, AxisCalibration
+try:
+    from .axis_detector import AxisDetector
+    from .calibrator import AxisCalibratorV3
+    from .marker_detector import MarkerDetectorV3
+    from .exporter import DataExporter
+    from .data_types import GraphFrame, AxisCalibration
+except ImportError:
+    from axis_detector import AxisDetector
+    from calibrator import AxisCalibratorV3
+    from marker_detector import MarkerDetectorV3
+    from exporter import DataExporter
+    from data_types import GraphFrame, AxisCalibration
 
 
 class GraphExtractor:
-    """Classe principal para extração de dados de gráficos"""
+    """Classe principal para extração de dados de gráficos - V3"""
     
-    def __init__(self, image_path: str):
+    def __init__(self, image_path: str, grid_divisions: int = 100):
         self.image_path = image_path
         self.img = cv2.imread(image_path)
         
         if self.img is None:
             raise ValueError(f"Erro ao carregar imagem: {image_path}")
         
+        self.grid_divisions = grid_divisions
         self.frame: Optional[GraphFrame] = None
         self.x_calibration: Optional[AxisCalibration] = None
         self.y_calibration: Optional[AxisCalibration] = None
@@ -36,19 +47,19 @@ class GraphExtractor:
         
         try:
             # 1. Detectar eixos
-            print("\n📐 Passo 1: Detectando eixos...")
+            print("\n🔍 Passo 1: Detectando eixos...")
             detector = AxisDetector(self.img)
             axes = detector.detect_axes()
             
             # 2. Encontrar frame
-            print("\n🖼️  Passo 2: Encontrando frame do gráfico...")
+            print("\n🖼️ Passo 2: Encontrando frame do gráfico...")
             self.frame = detector.find_frame(axes)
             if not self.frame:
                 raise ValueError("Não foi possível detectar o frame do gráfico")
             
             # 3. Calibrar eixos
             print("\n📏 Passo 3: Calibrando eixos...")
-            calibrator = AxisCalibratorV2(self.img, self.frame)
+            calibrator = AxisCalibratorV3(self.img, self.frame)
             self.x_calibration = calibrator.calibrate_x_axis()
             self.y_calibration = calibrator.calibrate_y_axis()
             
@@ -57,9 +68,9 @@ class GraphExtractor:
                 print(f"    Zero em: {self.x_calibration.zero_position:.2%}")
             print(f"  ✓ Eixo Y: [{self.y_calibration.min_value:.2f}, {self.y_calibration.max_value:.2f}]")
             
-            # 4. Detectar marcadores
-            print("\n🎯 Passo 4: Detectando marcadores...")
-            marker_det = MarkerDetectorV2(self.img, self.frame)
+            # 4. Detectar marcadores (VERSÃO HÍBRIDA)
+            print(f"\n🎯 Passo 4: Detectando pontos (HSV + Grid {self.grid_divisions}x{self.grid_divisions})...")
+            marker_det = MarkerDetectorV3(self.img, self.frame, grid_divisions=self.grid_divisions)
             self.data_points = marker_det.detect_all(self.x_calibration, self.y_calibration)
             
             print("\n" + "="*60)
@@ -155,29 +166,31 @@ class GraphExtractor:
         
         return summary
     
+    def set_manual_calibration(self, x_min: float, x_max: float, 
+                                y_min: float, y_max: float):
+        """
+        Define calibração manual dos eixos
+        Útil quando OCR falha
+        """
+        print(f"\n📝 Aplicando calibração manual:")
+        print(f"  X: [{x_min}, {x_max}]")
+        print(f"  Y: [{y_min}, {y_max}]")
+        
+        self.x_calibration = AxisCalibration(x_min, x_max)
+        self.y_calibration = AxisCalibration(y_min, y_max)
+        
+        # Recalcular coordenadas dos pontos
+        if self.data_points:
+            self._recalibrate_points()
+    
     def _recalibrate_points(self):
         """Recalcula coordenadas dos pontos com nova calibração"""
         if not self.data_points or not self.frame:
             return
         
-        # Armazenar pontos em coordenadas de pixel
-        pixel_points = {}
-        
-        for color, points in self.data_points.items():
-            pixel_points[color] = []
-            for pt in points:
-                # Converter de volta para normalizado (0-1)
-                norm_x = (pt['x'] - 0) / (1 - 0)  # Estava em [0,1]
-                norm_y = (pt['y'] - 0) / (1 - 0)
-                
-                # Aplicar nova calibração
-                real_x = self.x_calibration.min_value + norm_x * (self.x_calibration.max_value - self.x_calibration.min_value)
-                real_y = self.y_calibration.min_value + norm_y * (self.y_calibration.max_value - self.y_calibration.min_value)
-                
-                pixel_points[color].append({
-                    'x': real_x,
-                    'y': real_y,
-                    'type': pt['type']
-                })
-        
-        self.data_points = pixel_points
+        # Re-processar marcadores com nova calibração
+        marker_det = MarkerDetectorV3(self.img, self.frame, grid_divisions=self.grid_divisions)
+        self.data_points = marker_det.detect_all(
+            self.x_calibration, 
+            self.y_calibration
+        )

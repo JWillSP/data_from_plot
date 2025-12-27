@@ -29,17 +29,17 @@ except Exception as e:
     sys.exit(1)
 
 try:
-    from calibrator_v3 import AxisCalibratorV3
-    print("  ✓ calibrator_v3 OK")
+    from calibrator import AxisCalibratorV3
+    print("  ✓ calibrator OK")
 except Exception as e:
-    print(f"  ❌ calibrator_v3: {e}")
+    print(f"  ❌ calibrator: {e}")
     sys.exit(1)
 
 try:
-    from marker_detector_v3 import MarkerDetectorV3
-    print("  ✓ marker_detector_v3 OK")
+    from marker_detector import MarkerDetectorV3
+    print("  ✓ marker_detector OK")
 except Exception as e:
-    print(f"  ❌ marker_detector_v3: {e}")
+    print(f"  ❌ marker_detector: {e}")
     sys.exit(1)
 
 try:
@@ -50,10 +50,10 @@ except Exception as e:
     sys.exit(1)
 
 try:
-    from graph_extractor_v3 import GraphExtractor
-    print("  ✓ graph_extractor_v3 OK")
+    from graph_extractor import GraphExtractor
+    print("  ✓ graph_extractor OK")
 except Exception as e:
-    print(f"  ❌ graph_extractor_v3: {e}")
+    print(f"  ❌ graph_extractor: {e}")
     sys.exit(1)
 
 print("\n2️⃣ Testando estrutura das classes...")

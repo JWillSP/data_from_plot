@@ -16,16 +16,11 @@ import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Importar versão ULTIMATE (nova)
-try:
-    from graph_extractor_ultimate import GraphExtractorUltimate as GraphExtractor
-    from calibrator_ultimate import AxisCalibration
-    print("✅ Usando GraphExtractor ULTIMATE (versão híbrida)")
-except ImportError:
-    # Fallback para versão antiga
-    from modules import GraphExtractor
-    from modules.data_types import AxisCalibration
-    print("⚠️  Usando GraphExtractor antigo (fallback)")
+
+# Fallback para versão antiga
+from modules import GraphExtractor
+from modules.data_types import AxisCalibration
+print("⚠️  Usando GraphExtractor antigo (fallback)")
 
 st.set_page_config(
     page_title="Data From Plot",
@@ -349,7 +344,7 @@ def main():
     st.divider()
     st.markdown("""
         <div style="text-align: center; color: #666; padding: 1rem;">
-            📊 Data From Plot v3.0 | Desenvolvido com ❤️
+            📊 Data From Plot v3.1 | Desenvolvido com IA
         </div>
     """, unsafe_allow_html=True)
 

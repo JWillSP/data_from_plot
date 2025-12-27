@@ -1,11 +1,11 @@
 """
-Graph Extractor V3 - Módulos HÍBRIDOS
-Combina o melhor de ambas versões:
-- Detecção HSV robusta
-- Grid 100x100 para curvas
-- OCR multi-estratégia
+Graph Extractor - Extração de dados de gráficos científicos
+Arquitetura híbrida:
+- Detecção HSV robusta para marcadores
+- Grid 100x100 para curvas finas
+- OCR multi-estratégia para eixos
 """
-from .graph_extractor_v3 import GraphExtractor
+from .graph_extractor import GraphExtractor
 from .data_types import Point, GraphAxis, GraphFrame, AxisCalibration
 
 __all__ = ['GraphExtractor', 'Point', 'GraphAxis', 'GraphFrame', 'AxisCalibration']
