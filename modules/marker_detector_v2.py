@@ -44,11 +44,10 @@ class MarkerDetectorV2:
         all_candidates.extend(shapes)
         print(f"  ✓ Camada 2 (formas): {len(shapes)}")
         
-        # Camada 3: Curvas finas (só se <50 pontos)
-        if len(all_candidates) < 50:
-            curves = self._detect_curves(roi, x1, y1)
-            all_candidates.extend(curves)
-            print(f"  ✓ Camada 3 (curvas): {len(curves)}")
+        # Camada 3: Curvas finas (SEMPRE ativa para linhas contínuas)
+        curves = self._detect_curves(roi, x1, y1)
+        all_candidates.extend(curves)
+        print(f"  ✓ Camada 3 (curvas): {len(curves)}")
         
         # Júri: deduplicar e agrupar
         final = self._jury_decision(all_candidates)
@@ -121,11 +120,11 @@ class MarkerDetectorV2:
         return markers
     
     def _detect_defined_shapes(self, roi, roi_gray, offset_x, offset_y) -> List[Point]:
-        """Camada 2: Contornos com múltiplos thresholds"""
+        """Camada 2: Contornos com múltiplos thresholds - FOCO EM QUADRADOS"""
         markers = []
         
-        # Multi-threshold (técnica do gabarito)
-        thresholds = [50, 70, 90, 110, 130]
+        # Thresholds menores para detectar quadrados pretos preenchidos
+        thresholds = [30, 50, 70, 90, 110]
         
         for thresh in thresholds:
             _, binary = cv2.threshold(roi_gray, thresh, 255, cv2.THRESH_BINARY_INV)
@@ -133,7 +132,8 @@ class MarkerDetectorV2:
             
             for cnt in contours:
                 area = cv2.contourArea(cnt)
-                if 15 < area < 500:
+                # Aumentar range de área (quadrados podem ser maiores)
+                if 10 < area < 1000:
                     M = cv2.moments(cnt)
                     if M['m00'] > 0:
                         cx = int(M['m10'] / M['m00'])
@@ -206,38 +206,42 @@ class MarkerDetectorV2:
         return markers
     
     def _jury_decision(self, candidates: List[Point]) -> List[Point]:
-        """Deduplicação com DBSCAN + votação"""
+        """Deduplicação com DBSCAN + votação (separa curvas de marcadores)"""
         if len(candidates) == 0:
             return []
         
-        # Coordenadas para clustering
-        coords = np.array([[p.x, p.y] for p in candidates])
-        
-        # DBSCAN: agrupa pontos próximos (<5 pixels)
-        clustering = DBSCAN(eps=5, min_samples=1).fit(coords)
-        labels = clustering.labels_
+        # Separar curvas de marcadores ANTES do clustering
+        curves = [p for p in candidates if p.marker_type == 'curve']
+        markers = [p for p in candidates if p.marker_type != 'curve']
         
         final = []
         
-        for label in set(labels):
-            cluster_points = [candidates[i] for i in range(len(candidates)) if labels[i] == label]
+        # Deduplica APENAS marcadores (quadrados/círculos)
+        if len(markers) > 0:
+            coords = np.array([[p.x, p.y] for p in markers])
+            clustering = DBSCAN(eps=5, min_samples=1).fit(coords)
+            labels = clustering.labels_
             
-            if len(cluster_points) == 1:
-                final.append(cluster_points[0])
-            else:
-                # Votação
-                cx = int(np.mean([p.x for p in cluster_points]))
-                cy = int(np.mean([p.y for p in cluster_points]))
+            for label in set(labels):
+                cluster_points = [markers[i] for i in range(len(markers)) if labels[i] == label]
                 
-                # Cor mais comum
-                colors = [p.color for p in cluster_points]
-                color = Counter(colors).most_common(1)[0][0]
-                
-                # Tipo mais comum
-                types = [p.marker_type for p in cluster_points]
-                marker_type = Counter(types).most_common(1)[0][0]
-                
-                final.append(Point(cx, cy, color, marker_type))
+                if len(cluster_points) == 1:
+                    final.append(cluster_points[0])
+                else:
+                    # Votação
+                    cx = int(np.mean([p.x for p in cluster_points]))
+                    cy = int(np.mean([p.y for p in cluster_points]))
+                    
+                    colors = [p.color for p in cluster_points]
+                    color = Counter(colors).most_common(1)[0][0]
+                    
+                    types = [p.marker_type for p in cluster_points]
+                    marker_type = Counter(types).most_common(1)[0][0]
+                    
+                    final.append(Point(cx, cy, color, marker_type))
+        
+        # Curvas: amostragem sem deduplicação (já são espaçadas)
+        final.extend(curves)
         
         return final
     
@@ -269,11 +273,17 @@ class MarkerDetectorV2:
         return False
     
     def _group_by_color(self, markers: List[Point], x_calib: AxisCalibration, y_calib: AxisCalibration) -> Dict:
-        """Agrupa e converte coordenadas"""
+        """Agrupa por COR + TIPO (separa curvas de marcadores)"""
         data_points = defaultdict(list)
         
         for marker in markers:
             color_key = self._get_color_key(marker.color)
+            
+            # CHAVE: cor + tipo (curva vs marcador)
+            if marker.marker_type == 'curve':
+                series_key = f"{color_key}_line"
+            else:
+                series_key = f"{color_key}_points"
             
             # Normalizar
             graph_x = (marker.x - self.frame.bottom_left[0]) / self.frame.width
@@ -283,7 +293,7 @@ class MarkerDetectorV2:
             real_x = self._pixel_to_real_x(graph_x, x_calib)
             real_y = self._pixel_to_real_y(graph_y, y_calib)
             
-            data_points[color_key].append({
+            data_points[series_key].append({
                 'x': real_x,
                 'y': real_y,
                 'type': marker.marker_type
