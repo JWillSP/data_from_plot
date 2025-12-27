@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 from typing import Dict, Optional
 from .axis_detector import AxisDetector
-from .calibrator import AxisCalibrator
-from .marker_detector import MarkerDetector
+from .calibrator_v2 import AxisCalibratorV2
+from .marker_detector_v2 import MarkerDetectorV2
 from .exporter import DataExporter
 from .data_types import GraphFrame, AxisCalibration
 
@@ -48,7 +48,7 @@ class GraphExtractor:
             
             # 3. Calibrar eixos
             print("\n📏 Passo 3: Calibrando eixos...")
-            calibrator = AxisCalibrator(self.img, self.frame)
+            calibrator = AxisCalibratorV2(self.img, self.frame)
             self.x_calibration = calibrator.calibrate_x_axis()
             self.y_calibration = calibrator.calibrate_y_axis()
             
@@ -59,7 +59,7 @@ class GraphExtractor:
             
             # 4. Detectar marcadores
             print("\n🎯 Passo 4: Detectando marcadores...")
-            marker_det = MarkerDetector(self.img, self.frame)
+            marker_det = MarkerDetectorV2(self.img, self.frame)
             self.data_points = marker_det.detect_all(self.x_calibration, self.y_calibration)
             
             print("\n" + "="*60)
