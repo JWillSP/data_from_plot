@@ -124,13 +124,17 @@ class AxisDetector:
             h_axes.sort(key=lambda a: min(a.y1, a.y2))
             v_axes.sort(key=lambda a: min(a.x1, a.x2))
             
+            # Usar apenas os 2 primeiros eixos horizontais (ignora bordas externas/legendas)
+            h_top = h_axes[0]
+            h_bottom = h_axes[1] if len(h_axes) > 1 else h_axes[0]
+            
             frame = GraphFrame(
-                top_left=(min(v_axes[0].x1, v_axes[0].x2), min(h_axes[0].y1, h_axes[0].y2)),
-                top_right=(max(v_axes[-1].x1, v_axes[-1].x2), min(h_axes[0].y1, h_axes[0].y2)),
-                bottom_left=(min(v_axes[0].x1, v_axes[0].x2), max(h_axes[-1].y1, h_axes[-1].y2)),
-                bottom_right=(max(v_axes[-1].x1, v_axes[-1].x2), max(h_axes[-1].y1, h_axes[-1].y2)),
+                top_left=(min(v_axes[0].x1, v_axes[0].x2), min(h_top.y1, h_top.y2)),
+                top_right=(max(v_axes[-1].x1, v_axes[-1].x2), min(h_top.y1, h_top.y2)),
+                bottom_left=(min(v_axes[0].x1, v_axes[0].x2), max(h_bottom.y1, h_bottom.y2)),
+                bottom_right=(max(v_axes[-1].x1, v_axes[-1].x2), max(h_bottom.y1, h_bottom.y2)),
                 width=max(v_axes[-1].x1, v_axes[-1].x2) - min(v_axes[0].x1, v_axes[0].x2),
-                height=max(h_axes[-1].y1, h_axes[-1].y2) - min(h_axes[0].y1, h_axes[0].y2)
+                height=max(h_bottom.y1, h_bottom.y2) - min(h_top.y1, h_top.y2)
             )
             
             print(f"  ✓ Frame: {frame.width}x{frame.height} pixels")
