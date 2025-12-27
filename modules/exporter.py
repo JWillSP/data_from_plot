@@ -6,7 +6,10 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List
-from .data_types import GraphFrame, AxisCalibration
+try:
+    from .data_types import GraphFrame, AxisCalibration
+except ImportError:
+    from data_types import GraphFrame, AxisCalibration
 
 
 class DataExporter:

@@ -15,8 +15,17 @@ import pandas as pd
 import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent))
-from modules import GraphExtractor
-from modules.data_types import AxisCalibration
+
+# Importar versão ULTIMATE (nova)
+try:
+    from graph_extractor_ultimate import GraphExtractorUltimate as GraphExtractor
+    from calibrator_ultimate import AxisCalibration
+    print("✅ Usando GraphExtractor ULTIMATE (versão híbrida)")
+except ImportError:
+    # Fallback para versão antiga
+    from modules import GraphExtractor
+    from modules.data_types import AxisCalibration
+    print("⚠️  Usando GraphExtractor antigo (fallback)")
 
 st.set_page_config(
     page_title="Data From Plot",
@@ -117,6 +126,20 @@ def main():
             }
         else:
             manual_calib = None
+        
+        st.divider()
+        
+        st.header("⚙️ Configurações Avançadas")
+        grid_size = st.slider(
+            "Tamanho do grid (curvas finas)",
+            min_value=50,
+            max_value=200,
+            value=100,
+            step=10,
+            help="Grid NxN para detectar curvas contínuas. Maior = mais pontos",
+            key="grid_size_slider"
+        )
+        st.caption(f"📊 {grid_size}x{grid_size} = {grid_size**2:,} células")
     
     # Inicializar session state
     if 'processed' not in st.session_state:
@@ -149,8 +172,8 @@ def main():
                 # Salvar arquivo
                 temp_path = save_uploaded_file(uploaded_file)
                 
-                # Criar extrator
-                extractor = GraphExtractor(temp_path)
+                # Criar extrator com grid_size
+                extractor = GraphExtractor(temp_path, grid_divisions=grid_size)
                 
                 # Processar
                 with st.expander("📋 Log de Processamento", expanded=False):

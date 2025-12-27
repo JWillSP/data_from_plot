@@ -4,7 +4,10 @@ Módulo de detecção de eixos
 import cv2
 import numpy as np
 from typing import List, Optional
-from .data_types import GraphAxis, GraphFrame
+try:
+    from .data_types import GraphAxis, GraphFrame
+except ImportError:
+    from data_types import GraphAxis, GraphFrame
 
 
 class AxisDetector:
