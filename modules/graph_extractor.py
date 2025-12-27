@@ -1,6 +1,7 @@
 """
 Classe principal do Graph Extractor V3 - HÍBRIDO
 Usa:
+- preprocessor (Remove legendas automaticamente)
 - marker_detector_v3 (HSV + Grid 10k)
 - calibrator_v3 (OCR robusto)
 """
@@ -13,23 +14,36 @@ try:
     from .marker_detector import MarkerDetectorV3
     from .exporter import DataExporter
     from .data_types import GraphFrame, AxisCalibration
+    from .preprocessor import preprocess_image
 except ImportError:
     from axis_detector import AxisDetector
     from calibrator import AxisCalibratorV3
     from marker_detector import MarkerDetectorV3
     from exporter import DataExporter
     from data_types import GraphFrame, AxisCalibration
+    from preprocessor import preprocess_image
 
 
 class GraphExtractor:
     """Classe principal para extração de dados de gráficos - V3"""
     
-    def __init__(self, image_path: str, grid_divisions: int = 100):
+    def __init__(self, image_path: str, grid_divisions: int = 100, remove_legends: bool = True):
         self.image_path = image_path
-        self.img = cv2.imread(image_path)
+        self.img_original = cv2.imread(image_path)
         
-        if self.img is None:
+        if self.img_original is None:
             raise ValueError(f"Erro ao carregar imagem: {image_path}")
+        
+        # Pré-processar: remover legendas se habilitado
+        if remove_legends:
+            print("🔧 Pré-processamento: Detectando legendas internas...")
+            self.img, preprocess_info = preprocess_image(self.img_original, remove_legends=True)
+            if preprocess_info['cleaned']:
+                print(f"  ✓ {len(preprocess_info['legend_boxes'])} legenda(s) removida(s)")
+            else:
+                print("  ✓ Nenhuma legenda detectada")
+        else:
+            self.img = self.img_original
         
         self.grid_divisions = grid_divisions
         self.frame: Optional[GraphFrame] = None
@@ -145,6 +159,38 @@ class GraphExtractor:
             print(f"  ✓ Visualização salva: {save_path}")
         
         return vis
+    
+    def detect_legends_interactive(self):
+        """
+        Detecta legendas e retorna visualização para confirmação do usuário
+        Retorna: (visualização com caixas marcadas, lista de caixas)
+        """
+        from .preprocessor import ImagePreprocessor
+        
+        preprocessor = ImagePreprocessor(self.img_original)
+        _, boxes = preprocessor.remove_legends(ask_user=True)
+        
+        if boxes:
+            vis = preprocessor.visualize_detected_boxes(boxes)
+            return vis, boxes
+        
+        return None, []
+    
+    def remove_detected_legends(self, boxes: list = None):
+        """
+        Remove as legendas detectadas
+        Se boxes=None, detecta automaticamente
+        """
+        from .preprocessor import ImagePreprocessor
+        
+        preprocessor = ImagePreprocessor(self.img_original)
+        
+        if boxes is None:
+            self.img, _ = preprocessor.remove_legends(ask_user=False)
+        else:
+            self.img = preprocessor._inpaint_boxes(self.img_original, boxes)
+        
+        print("  ✓ Legendas removidas")
     
     def get_summary(self) -> Dict:
         """Retorna resumo dos dados extraídos"""

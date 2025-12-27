@@ -1,6 +1,6 @@
 """
 Graph Extractor - Aplicação Streamlit
-Fluxo contínuo e simplificado
+Com detecção interativa de legendas
 """
 import streamlit as st
 import cv2
@@ -15,12 +15,8 @@ import pandas as pd
 import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent))
-
-
-# Fallback para versão antiga
 from modules import GraphExtractor
 from modules.data_types import AxisCalibration
-print("⚠️  Usando GraphExtractor antigo (fallback)")
 
 st.set_page_config(
     page_title="Data From Plot",
@@ -100,9 +96,23 @@ def main():
         ✅ Múltiplos tipos de marcadores  
         ✅ Calibração automática (OCR)  
         ✅ Calibração manual  
+        ✅ Remoção de legendas (IA) 🆕
         ✅ Gráficos interativos  
         ✅ Exportação Excel  
         """)
+        
+        st.divider()
+        
+        # Grid size
+        st.header("🎛️ Configurações")
+        grid_size = st.slider(
+            "Grid de detecção (NxN)",
+            min_value=50,
+            max_value=200,
+            value=100,
+            step=10,
+            help="Maior = mais pontos, mais lento"
+        )
         
         st.divider()
         
@@ -121,26 +131,18 @@ def main():
             }
         else:
             manual_calib = None
-        
-        st.divider()
-        
-        st.header("⚙️ Configurações Avançadas")
-        grid_size = st.slider(
-            "Tamanho do grid (curvas finas)",
-            min_value=50,
-            max_value=200,
-            value=100,
-            step=10,
-            help="Grid NxN para detectar curvas contínuas. Maior = mais pontos",
-            key="grid_size_slider"
-        )
-        st.caption(f"📊 {grid_size}x{grid_size} = {grid_size**2:,} células")
     
     # Inicializar session state
     if 'processed' not in st.session_state:
         st.session_state.processed = False
     if 'extractor' not in st.session_state:
         st.session_state.extractor = None
+    if 'legend_step' not in st.session_state:
+        st.session_state.legend_step = 'upload'  # upload -> detect -> confirm -> process
+    if 'detected_boxes' not in st.session_state:
+        st.session_state.detected_boxes = []
+    if 'temp_path' not in st.session_state:
+        st.session_state.temp_path = None
     
     # Upload de imagem
     st.header("📤 1. Carregar Imagem")
@@ -151,6 +153,12 @@ def main():
     )
     
     if uploaded_file is not None:
+        # Salvar temp path
+        if st.session_state.temp_path is None:
+            st.session_state.temp_path = save_uploaded_file(uploaded_file)
+        
+        temp_path = st.session_state.temp_path
+        
         # Mostrar preview
         col1, col2 = st.columns([1, 1])
         
@@ -159,183 +167,239 @@ def main():
             image = Image.open(uploaded_file)
             st.image(image, caption="Imagem carregada", use_container_width=True)
         
-        # Processar automaticamente
-        st.header("🔍 2. Processamento")
+        # MODO INTERATIVO DE LEGENDAS
+        st.header("🔍 2. Detecção de Legendas Internas")
         
-        with st.spinner("Processando gráfico..."):
-            try:
-                # Salvar arquivo
-                temp_path = save_uploaded_file(uploaded_file)
-                
-                # Criar extrator com grid_size
-                extractor = GraphExtractor(temp_path, grid_divisions=grid_size)
-                
-                # Processar
-                with st.expander("📋 Log de Processamento", expanded=False):
-                    data = extractor.process()
-                
-                # Aplicar calibração manual se habilitada
-                if manual_calib:
-                    extractor.x_calibration = AxisCalibration(
-                        manual_calib['x_min'], 
-                        manual_calib['x_max']
-                    )
-                    extractor.y_calibration = AxisCalibration(
-                        manual_calib['y_min'], 
-                        manual_calib['y_max']
-                    )
-                    
-                    # Recalcular pontos
-                    for color_key in list(extractor.data_points.keys()):
-                        points = extractor.data_points[color_key]
-                        new_points = []
-                        
-                        for pt in points:
-                            # Normalizar (assumindo que veio de 0-1)
-                            norm_x = pt['x']
-                            norm_y = pt['y']
-                            
-                            # Aplicar nova calibração
-                            real_x = manual_calib['x_min'] + norm_x * (manual_calib['x_max'] - manual_calib['x_min'])
-                            real_y = manual_calib['y_min'] + norm_y * (manual_calib['y_max'] - manual_calib['y_min'])
-                            
-                            new_points.append({
-                                'x': real_x,
-                                'y': real_y,
-                                'type': pt['type']
-                            })
-                        
-                        extractor.data_points[color_key] = new_points
-                    
-                    st.success(f"✅ Calibração manual: X[{manual_calib['x_min']}, {manual_calib['x_max']}], Y[{manual_calib['y_min']}, {manual_calib['y_max']}]")
-                
-                st.session_state.extractor = extractor
-                st.session_state.processed = True
-                
-                # Resumo
-                summary = extractor.get_summary()
-                
-                col_a, col_b, col_c = st.columns(3)
-                with col_a:
-                    st.metric("Séries Detectadas", summary['total_series'])
-                with col_b:
-                    st.metric("Total de Pontos", summary['total_points'])
-                with col_c:
-                    st.metric("Calibração", "Manual" if manual_calib else "Automática")
-                
-            except Exception as e:
-                st.error(f"❌ Erro: {str(e)}")
-                st.exception(e)
-                st.session_state.processed = False
-        
-        # Visualização
-        if st.session_state.processed and st.session_state.extractor:
-            extractor = st.session_state.extractor
+        if st.session_state.legend_step == 'upload':
+            st.info("👆 Clique no botão abaixo para detectar legendas automaticamente")
             
+            if st.button("🔍 Detectar Legendas", type="primary", use_container_width=True):
+                with st.spinner("Detectando legendas..."):
+                    try:
+                        # Criar extractor SEM remover legendas
+                        st.write("DEBUG: Criando extractor...")
+                        extractor_temp = GraphExtractor(temp_path, grid_divisions=grid_size, remove_legends=False)
+                        
+                        # Detectar legendas
+                        st.write("DEBUG: Chamando detect_legends_interactive()...")
+                        vis, boxes = extractor_temp.detect_legends_interactive()
+                        
+                        st.write(f"DEBUG: Detectadas {len(boxes)} caixas")
+                        st.write(f"DEBUG: Boxes: {boxes}")
+                        
+                        st.session_state.detected_boxes = boxes
+                        
+                        if boxes:
+                            st.success(f"✓ Detectadas {len(boxes)} legendas!")
+                            st.session_state.legend_step = 'confirm'
+                            st.session_state.legend_vis = vis
+                            st.rerun()
+                        else:
+                            st.info("✅ Nenhuma legenda interna detectada!")
+                            st.session_state.legend_step = 'process'
+                            st.rerun()
+                    
+                    except Exception as e:
+                        st.error(f"❌ Erro na detecção: {str(e)}")
+                        st.exception(e)
+        
+        elif st.session_state.legend_step == 'confirm':
+            st.warning(f"⚠️ Detectadas {len(st.session_state.detected_boxes)} legenda(s) interna(s)")
+            
+            # Mostrar visualização
             with col2:
-                st.subheader("Detecção de Pontos")
-                vis_path = os.path.join(tempfile.gettempdir(), 'visualization.png')
-                vis = extractor.visualize(vis_path)
-                vis_rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
-                st.image(vis_rgb, caption="Pontos detectados", use_container_width=True)
+                st.subheader("Legendas Detectadas")
+                vis_rgb = cv2.cvtColor(st.session_state.legend_vis, cv2.COLOR_BGR2RGB)
+                st.image(vis_rgb, caption="Caixas vermelhas = legendas detectadas", use_container_width=True)
             
-            # Gráficos interativos
-            st.header("📊 3. Gráficos Extraídos")
-
-
-
-            with st.expander("🎯 Filtrar Séries", expanded=False):
-                available_series = list(extractor.data_points.keys())
-                if available_series:
-                    series_to_keep = st.multiselect(
-                        "Selecione as séries para manter:",
-                        options=available_series,
-                        default=available_series,
-                        key="series_filter"
-                    )
+            st.markdown("**O que deseja fazer?**")
+            
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                if st.button("✅ Remover Legendas", type="primary", use_container_width=True):
+                    st.session_state.legend_step = 'process'
+                    st.session_state.remove_legends = True
+                    st.rerun()
+            
+            with col_b:
+                if st.button("❌ Manter Legendas", use_container_width=True):
+                    st.session_state.legend_step = 'process'
+                    st.session_state.remove_legends = False
+                    st.rerun()
+        
+        elif st.session_state.legend_step == 'process':
+            # Processar gráfico
+            st.header("⚙️ 3. Processamento")
+            
+            with st.spinner("Processando gráfico..."):
+                try:
+                    # Criar extrator
+                    remove_legends_flag = st.session_state.get('remove_legends', False)
                     
-                    if st.button("Aplicar Filtro", key="apply_filter"):
-                        # Remover séries não selecionadas
-                        for series in list(extractor.data_points.keys()):
-                            if series not in series_to_keep:
-                                del extractor.data_points[series]
-                        st.success(f"✅ {len(series_to_keep)} série(s) mantida(s)")
-                        st.rerun()
-
-
-            
-            figs = plot_series(
-                extractor.data_points,
-                extractor.x_calibration,
-                extractor.y_calibration
-            )
-            
-            if figs:
-                # Mostrar cada gráfico
-                for color, fig, df in figs:
-                    with st.expander(f"📈 {color} ({len(df)} pontos)", expanded=True):
-                        st.plotly_chart(fig, use_container_width=True)
+                    if remove_legends_flag:
+                        st.info("🧹 Removendo legendas detectadas...")
+                        extractor = GraphExtractor(temp_path, grid_divisions=grid_size, remove_legends=False)
+                        extractor.remove_detected_legends(st.session_state.detected_boxes)
+                    else:
+                        extractor = GraphExtractor(temp_path, grid_divisions=grid_size, remove_legends=False)
+                    
+                    # Processar
+                    with st.expander("📋 Log de Processamento", expanded=False):
+                        data = extractor.process()
+                    
+                    # Aplicar calibração manual se habilitada
+                    if manual_calib:
+                        extractor.x_calibration = AxisCalibration(
+                            manual_calib['x_min'], 
+                            manual_calib['x_max']
+                        )
+                        extractor.y_calibration = AxisCalibration(
+                            manual_calib['y_min'], 
+                            manual_calib['y_max']
+                        )
                         
-                        # Mostrar preview dos dados
-                        st.dataframe(df.head(10), use_container_width=True)
-            else:
-                st.warning("⚠️ Nenhum ponto detectado")
-            
-            # Exportação
-            st.header("💾 4. Exportar Dados")
-            
-            col_x, col_y, col_z = st.columns(3)
-            
-            with col_x:
-                if st.button("📊 Exportar Excel", use_container_width=True, key="export_excel_btn"):
-                    try:
-                        excel_path = os.path.join(tempfile.gettempdir(), 'graph_data.xlsx')
-                        extractor.export_excel(excel_path)
+                        # Recalcular pontos
+                        for color_key in list(extractor.data_points.keys()):
+                            points = extractor.data_points[color_key]
+                            new_points = []
+                            
+                            for pt in points:
+                                norm_x = pt['x']
+                                norm_y = pt['y']
+                                
+                                real_x = manual_calib['x_min'] + norm_x * (manual_calib['x_max'] - manual_calib['x_min'])
+                                real_y = manual_calib['y_min'] + norm_y * (manual_calib['y_max'] - manual_calib['y_min'])
+                                
+                                new_points.append({
+                                    'x': real_x,
+                                    'y': real_y,
+                                    'type': pt['type']
+                                })
+                            
+                            extractor.data_points[color_key] = new_points
                         
-                        with open(excel_path, 'rb') as f:
-                            st.download_button(
-                                label="⬇️ Download Excel",
-                                data=f,
-                                file_name='graph_data.xlsx',
-                                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                use_container_width=True,
-                                key="download_excel_btn"
-                            )
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
+                        st.success(f"✅ Calibração manual: X[{manual_calib['x_min']}, {manual_calib['x_max']}], Y[{manual_calib['y_min']}, {manual_calib['y_max']}]")
+                    
+                    st.session_state.extractor = extractor
+                    st.session_state.processed = True
+                    
+                    # Resumo
+                    summary = extractor.get_summary()
+                    
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        st.metric("Séries Detectadas", summary['total_series'])
+                    with col_b:
+                        st.metric("Total de Pontos", summary['total_points'])
+                    with col_c:
+                        st.metric("Calibração", "Manual" if manual_calib else "Automática")
+                    
+                except Exception as e:
+                    st.error(f"❌ Erro: {str(e)}")
+                    st.exception(e)
+                    st.session_state.processed = False
             
-            with col_y:
-                if st.button("📄 Exportar CSV", use_container_width=True, key="export_csv_btn"):
-                    try:
-                        csv_path = os.path.join(tempfile.gettempdir(), 'graph_data.csv')
-                        extractor.export_csv(csv_path)
+            # Visualização
+            if st.session_state.processed and st.session_state.extractor:
+                extractor = st.session_state.extractor
+                
+                with col2:
+                    st.subheader("Detecção de Pontos")
+                    vis_path = os.path.join(tempfile.gettempdir(), 'visualization.png')
+                    vis = extractor.visualize(vis_path)
+                    vis_rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
+                    st.image(vis_rgb, caption="Pontos detectados", use_container_width=True)
+                
+                # Gráficos interativos
+                st.header("📊 4. Gráficos Extraídos")
+                
+                with st.expander("🎯 Filtrar Séries", expanded=False):
+                    available_series = list(extractor.data_points.keys())
+                    if available_series:
+                        series_to_keep = st.multiselect(
+                            "Selecione as séries para manter:",
+                            options=available_series,
+                            default=available_series,
+                            key="series_filter"
+                        )
                         
-                        with open(csv_path, 'r', encoding='utf-8') as f:
-                            st.download_button(
-                                label="⬇️ Download CSV",
-                                data=f,
-                                file_name='graph_data.csv',
-                                mime='text/csv',
-                                use_container_width=True,
-                                key="download_csv_btn"
-                            )
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-            
-            with col_z:
-                if st.button("🖼️ Exportar Visualização", use_container_width=True, key="export_vis_btn"):
-                    try:
-                        with open(vis_path, 'rb') as f:
-                            st.download_button(
-                                label="⬇️ Download PNG",
-                                data=f,
-                                file_name='visualization.png',
-                                mime='image/png',
-                                use_container_width=True,
-                                key="download_vis_btn"
-                            )
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
+                        if st.button("Aplicar Filtro", key="apply_filter"):
+                            for series in list(extractor.data_points.keys()):
+                                if series not in series_to_keep:
+                                    del extractor.data_points[series]
+                            st.success(f"✅ {len(series_to_keep)} série(s) mantida(s)")
+                            st.rerun()
+                
+                figs = plot_series(
+                    extractor.data_points,
+                    extractor.x_calibration,
+                    extractor.y_calibration
+                )
+                
+                if figs:
+                    for color, fig, df in figs:
+                        with st.expander(f"📈 {color} ({len(df)} pontos)", expanded=True):
+                            st.plotly_chart(fig, use_container_width=True)
+                            st.dataframe(df.head(10), use_container_width=True)
+                else:
+                    st.warning("⚠️ Nenhum ponto detectado")
+                
+                # Exportação
+                st.header("💾 5. Exportar Dados")
+                
+                col_x, col_y, col_z = st.columns(3)
+                
+                with col_x:
+                    if st.button("📊 Exportar Excel", use_container_width=True, key="export_excel_btn"):
+                        try:
+                            excel_path = os.path.join(tempfile.gettempdir(), 'graph_data.xlsx')
+                            extractor.export_excel(excel_path)
+                            
+                            with open(excel_path, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ Download Excel",
+                                    data=f,
+                                    file_name='graph_data.xlsx',
+                                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                    use_container_width=True,
+                                    key="download_excel_btn"
+                                )
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+                
+                with col_y:
+                    if st.button("📄 Exportar CSV", use_container_width=True, key="export_csv_btn"):
+                        try:
+                            csv_path = os.path.join(tempfile.gettempdir(), 'graph_data.csv')
+                            extractor.export_csv(csv_path)
+                            
+                            with open(csv_path, 'r', encoding='utf-8') as f:
+                                st.download_button(
+                                    label="⬇️ Download CSV",
+                                    data=f,
+                                    file_name='graph_data.csv',
+                                    mime='text/csv',
+                                    use_container_width=True,
+                                    key="download_csv_btn"
+                                )
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+                
+                with col_z:
+                    if st.button("🖼️ Exportar Visualização", use_container_width=True, key="export_vis_btn"):
+                        try:
+                            with open(vis_path, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ Download PNG",
+                                    data=f,
+                                    file_name='visualization.png',
+                                    mime='image/png',
+                                    use_container_width=True,
+                                    key="download_vis_btn"
+                                )
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
     
     else:
         st.info("👆 Faça upload de uma imagem para começar")
@@ -344,7 +408,7 @@ def main():
     st.divider()
     st.markdown("""
         <div style="text-align: center; color: #666; padding: 1rem;">
-            📊 Data From Plot v3.2 | Desenvolvido com IA
+            📊 Data From Plot v3.3 | Desenvolvido com ❤️
         </div>
     """, unsafe_allow_html=True)
 
