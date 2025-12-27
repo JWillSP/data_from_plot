@@ -349,7 +349,7 @@ def main():
     st.divider()
     st.markdown("""
         <div style="text-align: center; color: #666; padding: 1rem;">
-            📊 Data From Plot v2.0 | Desenvolvido com ❤️
+            📊 Data From Plot v3.0 | Desenvolvido com ❤️
         </div>
     """, unsafe_allow_html=True)
 
